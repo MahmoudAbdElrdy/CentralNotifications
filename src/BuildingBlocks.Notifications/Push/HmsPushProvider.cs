@@ -1,7 +1,6 @@
 using BuildingBlocks.Notifications.Contracts;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
-using HMS = AGConnectAdmin.Messaging;
 
 namespace BuildingBlocks.Notifications.Push;
 
@@ -29,27 +28,39 @@ public sealed class HmsPushProvider : IPushProvider
         {
             var client = _factory.Get(t.Provider);
 
-            var message = new HMS.Message
+            var message = new HmsMessageRequest
             {
-                Token = new List<string> { t.Token },
-                Data = JsonConvert.SerializeObject(msg.Data ?? new { }),
-                Android = new HMS.AndroidConfig { TTL = TimeSpan.FromSeconds(ttl), Urgency = HMS.UrgencyPriority.HIGH }
+                ValidateOnly = false,
+                Message = new HmsMessage
+                {
+                    Token = new List<string> { t.Token },
+                    Data = JsonConvert.SerializeObject(msg.Data ?? new { }),
+                    Android = new HmsAndroidConfig
+                    {
+                        Ttl = $"{ttl}s",
+                        Urgency = "HIGH"
+                    }
+                }
             };
 
             if (!msg.Silent)
             {
-                message.Notification = new HMS.Notification { Title = msg.Title, Body = msg.Body };
-                message.Android.Notification = new HMS.AndroidNotification
+                message.Message.Notification = new HmsNotification
+                {
+                    Title = msg.Title,
+                    Body = msg.Body
+                };
+                message.Message.Android.Notification = new HmsAndroidNotification
                 {
                     Title = msg.Title,
                     Body = msg.Body,
-                    ClickAction = HMS.ClickAction.OpenApp(),
-                    Importance = HMS.NotificationImportance.HIGH,
+                    ClickAction = new HmsClickAction { Type = 1 }, // 1 = Open App
+                    Importance = "HIGH",
                     Sound = "default"
                 };
             }
 
-            await client.SendAsync(message);
+            await client.SendAsync(message, ct);
         }
     }
 }

@@ -1,8 +1,6 @@
 using System.Collections.Concurrent;
-using AGConnectAdmin;
 using BuildingBlocks.Notifications.Contracts;
 using Microsoft.Extensions.Options;
-using HMS = AGConnectAdmin.Messaging;
 
 namespace BuildingBlocks.Notifications.Push;
 
@@ -16,38 +14,54 @@ public sealed class HuaweiPushOptions
 public sealed class HuaweiAppOptions
 {
     public string AppInstanceName { get; set; } = default!;
+    public string AppId { get; set; } = default!;
     public string ClientId { get; set; } = default!;
     public string ClientSecret { get; set; } = default!;
 }
 
+public sealed class HmsMessagingClient
+{
+    private readonly IHmsRestClient _restClient;
+    private readonly HuaweiAppOptions _appOptions;
+
+    public HmsMessagingClient(IHmsRestClient restClient, HuaweiAppOptions appOptions)
+    {
+        _restClient = restClient;
+        _appOptions = appOptions;
+    }
+
+    public async Task SendAsync(HmsMessageRequest message, CancellationToken ct = default)
+    {
+        var accessToken = await _restClient.GetAccessTokenAsync(_appOptions.ClientId, _appOptions.ClientSecret, ct);
+        await _restClient.SendMessageAsync(_appOptions.AppId, accessToken, message, ct);
+    }
+}
+
 public interface IHmsMessagingFactory
 {
-    HMS.AGConnectMessaging Get(PushTokenProvider provider);
+    HmsMessagingClient Get(PushTokenProvider provider);
 }
 
 public sealed class HmsMessagingFactory : IHmsMessagingFactory
 {
     private readonly HuaweiPushOptions _opt;
-    private readonly ConcurrentDictionary<PushTokenProvider, HMS.AGConnectMessaging> _cache = new();
+    private readonly IHmsRestClient _restClient;
+    private readonly ConcurrentDictionary<PushTokenProvider, HmsMessagingClient> _cache = new();
 
-    public HmsMessagingFactory(IOptions<HuaweiPushOptions> opt) => _opt = opt.Value;
+    public HmsMessagingFactory(IOptions<HuaweiPushOptions> opt, IHmsRestClient restClient)
+    {
+        _opt = opt.Value;
+        _restClient = restClient;
+    }
 
-    public HMS.AGConnectMessaging Get(PushTokenProvider provider) => _cache.GetOrAdd(provider, Create);
+    public HmsMessagingClient Get(PushTokenProvider provider) => _cache.GetOrAdd(provider, Create);
 
-    private HMS.AGConnectMessaging Create(PushTokenProvider provider)
+    private HmsMessagingClient Create(PushTokenProvider provider)
     {
         var key = provider.ToString();
         if (!_opt.Apps.TryGetValue(key, out var appCfg))
             throw new InvalidOperationException($"HuaweiPush:Apps:{key} not configured.");
 
-        var app = AGConnectApp.Create(new AppOptions
-        {
-            LoginUri = _opt.LoginUri,
-            ApiBaseUri = _opt.ApiBaseUri,
-            ClientId = appCfg.ClientId,
-            ClientSecret = appCfg.ClientSecret
-        }, appCfg.AppInstanceName);
-
-        return HMS.AGConnectMessaging.GetMessaging(app);
+        return new HmsMessagingClient(_restClient, appCfg);
     }
 }

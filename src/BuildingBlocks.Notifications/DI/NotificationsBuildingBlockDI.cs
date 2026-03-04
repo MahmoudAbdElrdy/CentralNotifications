@@ -56,6 +56,7 @@ public static class NotificationsBuildingBlockDI
 
         if (opt.EnableHms)
         {
+            services.AddHttpClient<IHmsRestClient, HmsRestClient>();
             services.AddSingleton<IHmsMessagingFactory, HmsMessagingFactory>();
             services.AddSingleton<IPushProvider, HmsPushProvider>();
             services.AddOptions<HuaweiPushOptions>().BindConfiguration("HuaweiPush");
