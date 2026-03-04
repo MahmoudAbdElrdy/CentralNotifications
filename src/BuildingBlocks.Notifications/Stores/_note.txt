@@ -1,0 +1,1 @@
+In central service mode, stores are EF-based in Persistence/.
